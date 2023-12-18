@@ -1,0 +1,106 @@
+# Import the required libraries
+import numpy as np
+from scipy.integrate import odeint
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Parameters for the economic model simulation
+# --------------------------------------------
+# Marginal_Propensity_to_Consume: the fraction of the change in income that the population will spend on consuming goods and services, as opposed to saving.
+# Expectation_Formation_Time: the time it takes for people to adjust their expectations regarding future income.
+# Production_Adjustment_Time: the time it takes for production to adjust to the level of demand and other economic indicators.
+# Investment: the fixed amount of investment fed into the economy within the model.
+# Government_Expenditure: the fixed amount of government expenditure injected into the economy.
+# Net_Exports: the value of the net exports assumed in the economy (exports minus imports).
+
+# Importing Data
+
+data = pd.read_excel('/[local path here]/Data.xls')
+
+time_points = data['Time'].values
+Investment_Data = interp1d(time_points, data['Investment Data'].values, fill_value="extrapolate")
+Government_Expenditure_Data = interp1d(time_points, data['Government Expenditure Data'].values, fill_value="extrapolate")
+Net_Exports_Data = interp1d(time_points, data['Net Exports Data'].values, fill_value="extrapolate")
+GDP_Data = interp1d(time_points, data['GDP Data'].values, fill_value="extrapolate")
+
+# Model definition
+# ----------------
+def model(y, t, params):
+    """
+    Define the system of ordinary differential equations (ODEs) for expected income and GDP.
+
+    Parameters:
+    y : array_like, shape (2,)
+        The state vector (Expected_Income, GDP).
+    T : float
+        The time variable.
+    Params : tuple
+        The parameters tuple (Reference_MPC, EFT, PAT, alpha).
+
+    Returns:
+    dydt : array_like, shape (2,)
+        The derivative of the state vector.
+    """
+    Expected_Income, GDP = y
+    Reference_MPC, EFT, PAT, alpha = params
+    I = Investment_Data(t)
+    G = Government_Expenditure_Data(t)
+    NX = Net_Exports_Data(t)
+
+# Calculating MPC for COVID-19 Shock
+
+    def calculate_mpc(t):
+        if 2020 <= t <= 2020.25:
+            return Reference_MPC * (1 - alpha)
+        else:
+            return Reference_MPC
+
+    MPC = calculate_mpc(t)
+
+
+    Consumption = MPC * Expected_Income  # Consumption equation
+    Aggregate_Demand = Consumption + I + G  # Aggregate demand equation
+    Change_in_Expected_Income = (GDP - Expected_Income) / EFT  # Differential equation for expected income
+    Change_in_GDP = (Aggregate_Demand + NX - GDP) / PAT  # Differential equation for GDP
+
+    return [Change_in_Expected_Income, Change_in_GDP]
+
+# Simulation parameters
+# ---------------------
+Expectation_Formation_Time = 2
+Production_Adjustment_Time = 1
+Net_Exports = 10
+Reference_MPC = 0.8     # Reference Marginal Propensity to Consume
+alpha = 0.4             # Percentage reduction in Reference MPC
+
+# Packing parameters into a tuple for passing to ODE solver
+params = (Reference_MPC, Expectation_Formation_Time, Production_Adjustment_Time, alpha)
+
+# Initial conditions
+Expected_Income0 = 250          # Initial expected income
+GDP0 = 16648.189                # Initial GDP from data
+y0 = [Expected_Income0, GDP0]
+
+# Time points to evaluate the ODEs at quarter-year intervals from 2013 to 2023
+t = np.arange(2013, 2023.25, 0.25)
+
+# Solving the ODEs
+# -----------------
+results = odeint(model, y0, t, args=(params,))
+
+# Extracting results
+Expected_Income_results, GDP_results = results.T  # .T transposes the results from odeint for easy unpacking
+
+# Plotting the results
+# --------------------
+plt.figure(figsize=(10, 6))
+plt.plot(t, GDP_results, label="Simulated GDP")  # Plot for GDP
+plt.plot(t, GDP_Data(t), label="GDP Data", linestyle="--")  # Plot for Expected Income
+plt.xticks(np.arange(2013, 2024, 1), rotation=45)
+plt.title("U.S. Simulated GDP vs. Historical Data")
+plt.xlabel("Year")
+plt.ylabel("Billions of Dollars")
+plt.legend()
+plt.grid(True)
+plt.show()
