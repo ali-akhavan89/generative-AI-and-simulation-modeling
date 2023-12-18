@@ -1,0 +1,86 @@
+from scipy.optimize import least_squares
+from scipy.integrate import odeint
+from scipy.interpolate import interp1d
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+data = pd.read_excel('/[local path here]/Data.xls')
+
+# Extract relevant data from the dataset
+time_points = data['Time'].values
+Investment_Data = interp1d(time_points, data['Investment Data'].values, fill_value="extrapolate")
+Government_Expenditure_Data = interp1d(time_points, data['Government Expenditure Data'].values, fill_value="extrapolate")
+Net_Exports_Data = interp1d(time_points, data['Net Exports Data'].values, fill_value="extrapolate")
+GDP_Data = interp1d(time_points, data['GDP Data'].values, fill_value="extrapolate")
+
+# Defining the model function
+def model(y, t, EFT, PAT, alpha, Reference_MPC, Expected_Income0):
+    Expected_Income, GDP = y
+    I = Investment_Data(t)             
+    G = Government_Expenditure_Data(t) 
+    NX = Net_Exports_Data(t)            
+
+    def calculate_mpc(t):
+        if 2020 <= t <= 2020.25:
+            return Reference_MPC * (1 - alpha)
+        else:
+            return Reference_MPC
+
+    MPC = calculate_mpc(t)
+    Consumption = MPC * Expected_Income                         
+    Aggregate_Demand = Consumption + I + G                      
+    Change_in_Expected_Income = (GDP - Expected_Income) / EFT   
+    Change_in_GDP = (Aggregate_Demand + NX - GDP) / PAT         
+
+    return [Change_in_Expected_Income, Change_in_GDP]
+
+# Objective function for least squares optimization
+def objective_function(params):
+    EFT, PAT, alpha, Reference_MPC, Expected_Income0 = params
+    y0 = [Expected_Income0, GDP_Data(time_points[0])]
+    t = time_points
+    results = odeint(model, y0, t, args=(EFT, PAT, alpha, Reference_MPC, Expected_Income0))
+    _, GDP_results = results.T
+    return GDP_results - GDP_Data(t)
+
+# Initial guess for the parameters
+initial_guess = [1, 0.5, 0.5, 0.75, 15000]
+
+# Bounds for the parameters
+param_bounds = ([0.25, 0.125, 0, 0.5, 13048.2], [10, 2, 1, 1, 17648.2])
+
+# Perform least squares optimization
+result = least_squares(objective_function, initial_guess, bounds=param_bounds)
+
+# Extract the estimated parameters
+EFT, PAT, alpha, Reference_MPC, Expected_Income0 = result.x
+
+# Simulate the model with the estimated parameters
+y0_estimated = [Expected_Income0, GDP_Data(time_points[0])]
+t_estimated = np.arange(2013, 2023.25, 0.25)
+results_estimated = odeint(model, y0_estimated, t_estimated, args=(EFT, PAT, alpha, Reference_MPC, Expected_Income0))
+_, GDP_results_estimated = results_estimated.T
+
+# Plotting the results
+plt.figure(figsize=(10, 6))
+plt.plot(t_estimated, GDP_results_estimated, label="Simulated GDP with Estimated Parameters")
+plt.plot(t_estimated, GDP_Data(t_estimated), label="Actual GDP Data", linestyle="--")
+plt.xticks(np.arange(2013, 2024, 1), rotation=45)
+plt.title("Simulated GDP vs. Actual GDP Data with Estimated Parameters")
+plt.xlabel("Year")
+plt.ylabel("Billions of Dollars")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Returning the estimated parameters
+estimated_parameters = {
+    'EFT': EFT,
+    'PAT': PAT,
+    'Alpha': alpha,
+    'Reference_MPC': Reference_MPC,
+    'Expected_Income0': Expected_Income0
+}
+
+estimated_parameters
