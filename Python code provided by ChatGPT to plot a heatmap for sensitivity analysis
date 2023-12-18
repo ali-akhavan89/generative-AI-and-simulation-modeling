@@ -1,0 +1,33 @@
+def sensitivity_analysis_heatmap(EFT_range, PAT_range, base_params, num_intervals=50):
+    # Generate grid for parameter ranges
+    EFT_values = np.linspace(*EFT_range, num_intervals)
+    PAT_values = np.linspace(*PAT_range, num_intervals)
+    
+    # Initialize the array to store final GDP values
+    final_GDP = np.zeros((num_intervals, num_intervals))
+    
+    # Iterate over the grid of EFT and PAT values
+    for i, EFT in enumerate(EFT_values):
+        for j, PAT in enumerate(PAT_values):
+            # Update the parameters
+            params = base_params.copy()
+            params[0] = EFT  # Update EFT
+            params[1] = PAT  # Update PAT
+            # Simulate GDP and store the final value
+            final_GDP[i, j] = simulate_gdp(*params)[-1]
+    
+    # Create a heat map
+    plt.figure(figsize=(10, 6))
+    plt.imshow(final_GDP, extent=[EFT_range[0], EFT_range[1], PAT_range[0], PAT_range[1]], origin='lower', aspect='auto')
+    plt.colorbar(label='Final GDP (Billions of Dollars)')
+    plt.xlabel('EFT')
+    plt.ylabel('PAT')
+    plt.title('Heat Map of Final GDP Value by Varying EFT and PAT')
+    plt.show()
+
+# Define the ranges for EFT and PAT you want to explore
+EFT_range = (EFT * 0.9, EFT * 1.1)  # ±10% variation
+PAT_range = (PAT * 0.9, PAT * 1.1)  # ±10% variation
+
+# Perform the heatmap sensitivity analysis
+sensitivity_analysis_heatmap(EFT_range, PAT_range, base_parameters)
