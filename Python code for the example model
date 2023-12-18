@@ -1,0 +1,54 @@
+import numpy as np
+from scipy.integrate import odeint
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+import pandas as pd
+
+data = pd.read_excel('/Models/Data.xls')
+
+time_points = data['Time'].values
+I_Data = interp1d(time_points, data['Investment Data'].values, fill_value="extrapolate")
+G_Data = interp1d(time_points, data['Government Expenditure Data'].values, fill_value="extrapolate")
+NX_Data = interp1d(time_points, data['Net Exports Data'].values, fill_value="extrapolate")
+GDP_Data = interp1d(time_points, data['GDP Data'].values, fill_value="extrapolate")
+
+Reference_MPC = 0.8
+alpha = 0.4
+
+def model(y, t, MPC, EFT, PAT, I, G, NX):
+
+    EI, GDP = y
+    I = I_Data(t)
+    G = G_Data(t)
+    NX = NX_Data(t)
+
+    def calculate_mpc(t):
+        if 2020 <= t <= 2020.25:
+            return Reference_MPC * (1 - alpha)
+        else:
+            return Reference_MPC
+
+    MPC = calculate_mpc(t)
+
+    C = MPC * EI  
+    delta_EI = (GDP - EI) / EFT  
+    delta_GDP = (C + I + G + NX - GDP) / PAT  
+
+    return [delta_EI, delta_GDP]
+
+MPC = 0.8
+EFT = 2
+PAT = 1
+I = 10
+G = 80
+NX = 10
+
+EI0 = 250  
+GDP0 = 250              
+y0 = [EI0, GDP0]
+
+t = np.arange(2013, 2023, 0.25)
+
+results = odeint(model, y0, t, args=(MPC, EFT, PAT, I, G, NX))
+
+EI_results, GDP_results = results.T  
