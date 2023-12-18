@@ -1,0 +1,101 @@
+import numpy as np
+from scipy.integrate import odeint
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+import pandas as pd
+
+data = pd.read_excel('/[local path here]/Data.xls')
+
+time_points = data['Time'].values
+Investment_Data = interp1d(time_points, data['Investment Data'].values, fill_value="extrapolate")
+Government_Expenditure_Data = interp1d(time_points, data['Government Expenditure Data'].values, fill_value="extrapolate")
+Net_Exports_Data = interp1d(time_points, data['Net Exports Data'].values, fill_value="extrapolate")
+GDP_Data = interp1d(time_points, data['GDP Data'].values, fill_value="extrapolate")
+
+
+def model(y, t, EFT, PAT, alpha, Reference_MPC, Expected_Income0):
+    Expected_Income, GDP = y
+
+    G = Government_Expenditure_Data(t)  
+    NX = Net_Exports_Data(t)            
+    I = Investment_Data(t)              
+
+    def calculate_mpc(t):
+        if 2020 <= t <= 2020.25:
+            return Reference_MPC * (1 - alpha)
+        else:
+            return Reference_MPC
+    
+    MPC = calculate_mpc(t)
+
+    Consumption = MPC * Expected_Income                         
+    Aggregate_Demand = Consumption + I + G                      
+    Change_in_Expected_Income = (GDP - Expected_Income) / EFT   
+    Change_in_GDP = (Aggregate_Demand + NX - GDP) / PAT         
+
+    return [Change_in_Expected_Income, Change_in_GDP]
+
+EFT = 4.393051824038606     
+PAT = 0.27413571078371973   
+alpha = 0.2845643006652703
+Reference_MPC = 0.8401864984381936   
+Expected_Income0 = 13050.870028438268  
+GDP0 = 16648.189      
+y0 = [Expected_Income0, GDP0]
+
+t = np.arange(2013, 2023.0078125, 0.0078125)
+
+def simulate_gdp(EFT, PAT, alpha, Reference_MPC, Expected_Income0):
+    results = odeint(model, y0, t, args=(EFT, PAT, alpha, Reference_MPC, Expected_Income0))
+    Expected_Income_results, GDP_results = results.T
+    return GDP_results
+
+
+def sensitivity_analysis_two_parameters(param1_name, param1_index, param2_name, param2_index, base_params, num_intervals=50, percentage_change=0.25):
+    base_value1 = base_params[param1_index]
+    base_value2 = base_params[param2_index]
+    
+    # Generate ranges for each parameter
+    param1_values = np.linspace(base_value1 * (1 - percentage_change), 
+                                base_value1 * (1 + percentage_change), 
+                                num_intervals)
+    param2_values = np.linspace(base_value2 * (1 - percentage_change), 
+                                base_value2 * (1 + percentage_change), 
+                                num_intervals)
+    
+    plt.figure(figsize=(10, 6))
+    
+    # Iterate over the range of values for the first parameter
+    for value1 in param1_values:
+        # Update the first parameter
+        params1 = base_params.copy()
+        params1[param1_index] = value1
+        # Iterate over the range of values for the second parameter
+        for value2 in param2_values:
+            # Update the second parameter
+            params2 = params1.copy()
+            params2[param2_index] = value2
+            # Simulate the GDP with the new parameters
+            simulation_result = simulate_gdp(*params2)
+            # Plot the result
+            plt.plot(t, simulation_result, color='lightgrey', alpha=0.5)
+    
+    # Overlay the base case and actual GDP data for comparison
+    plt.plot(t, simulate_gdp(*base_params), label="Base Case", linewidth=2)
+    plt.plot(t, GDP_Data(t), label="GDP Data", linestyle="--")
+    plt.xticks(np.arange(2013, 2024, 1), rotation=45)
+    plt.title(f"Sensitivity Analysis of Simulated GDP with Varied {param1_name} and {param2_name}")
+    plt.xlabel("Year")
+    plt.ylabel("Billions of Dollars")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+# Base parameters
+base_parameters = [EFT, PAT, alpha, Reference_MPC, Expected_Income0]
+
+# Perform sensitivity analysis for EFT
+sensitivity_analysis_two_parameters('EFT', 0, 'PAT', 1, base_parameters)
+
+results = odeint(model, y0, t, args=(EFT, PAT, alpha, Reference_MPC, Expected_Income0))
+Expected_Income_results, GDP_results = results.T 
